@@ -23,6 +23,31 @@ import trainer.utils.training_paths as train_paths
 from core.config.config_handler import save_config_toml
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.models.utility_models import ImageModelType
+from pathlib import Path
+from trainer.utils.style_detection import detect_styles_in_prompts
+
+
+def get_image_training_config_template_path(model_type: str, train_data_dir: str) -> tuple[str, bool]:
+    model_type = model_type.lower()
+    if model_type == ImageModelType.SDXL.value:
+        prompts_path = os.path.join(train_data_dir, "5_lora style")
+        prompts = []
+        for file in os.listdir(prompts_path):
+            if file.endswith(".txt"):
+                with open(os.path.join(prompts_path, file), "r") as f:
+                    prompt = f.read().strip()
+                    prompts.append(prompt)
+
+        styles = detect_styles_in_prompts(prompts)
+        print(f"Styles: {styles}")
+
+        if styles:
+            return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH) / "base_diffusion_sdxl_style.toml"), True
+        else:
+            return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH) / "base_diffusion_sdxl_person.toml"), False
+
+    elif model_type == ImageModelType.FLUX.value:
+        return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH) / "base_diffusion_flux.toml"), None
 
 
 def get_model_path(path: str) -> str:
@@ -37,7 +62,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     train_data_dir = train_paths.get_image_training_images_dir(task_id)
 
     """Create the diffusion config file"""
-    config_template_path, is_style = train_paths.get_image_training_config_template_path(model_type, train_data_dir)
+    config_template_path, is_style = get_image_training_config_template_path(model_type, train_data_dir)
 
     with open(config_template_path, "r") as file:
         config = toml.load(file)
@@ -146,14 +171,15 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = output_dir
 
-    if is_style:
-        network_config = config_mapping[network_config_style[model_name]]
-    else:
-        network_config = config_mapping[network_config_person[model_name]]
+    if model_type == ImageModelType.SDXL.value:
+        if is_style:
+            network_config = config_mapping[network_config_style[model_name]]
+        else:
+            network_config = config_mapping[network_config_person[model_name]]
 
-    config["network_dim"] = network_config["network_dim"]
-    config["network_alpha"] = network_config["network_alpha"]
-    config["network_args"] = network_config["network_args"]
+        config["network_dim"] = network_config["network_dim"]
+        config["network_alpha"] = network_config["network_alpha"]
+        config["network_args"] = network_config["network_args"]
 
     # Save config to file
     config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
@@ -165,17 +191,30 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 def run_training(model_type, config_path):
     print(f"Starting training with config: {config_path}", flush=True)
 
-    training_command = [
-        "accelerate", "launch",
-        "--dynamo_backend", "no",
-        "--dynamo_mode", "default",
-        "--mixed_precision", "bf16",
-        "--num_processes", "1",
-        "--num_machines", "1",
-        "--num_cpu_threads_per_process", "2",
-        f"/app/sd-script/{model_type}_train_network.py",
-        "--config_file", config_path
-    ]
+    if model_type == ImageModelType.SDXL.value:
+        training_command = [
+            "accelerate", "launch",
+            "--dynamo_backend", "no",
+            "--dynamo_mode", "default",
+            "--mixed_precision", "bf16",
+            "--num_processes", "1",
+            "--num_machines", "1",
+            "--num_cpu_threads_per_process", "2",
+            f"/app/sd-script/{model_type}_train_network.py",
+            "--config_file", config_path
+        ]
+    elif model_type == ImageModelType.FLUX.value:
+        training_command = [
+            "accelerate", "launch",
+            "--dynamo_backend", "no",
+            "--dynamo_mode", "default",
+            "--mixed_precision", "bf16",
+            "--num_processes", "1",
+            "--num_machines", "1",
+            "--num_cpu_threads_per_process", "2",
+            f"/app/sd-scripts/{model_type}_train_network.py",
+            "--config_file", config_path
+        ]
 
     try:
         print("Starting training subprocess...\n", flush=True)
