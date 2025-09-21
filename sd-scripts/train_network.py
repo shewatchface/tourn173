@@ -1438,32 +1438,15 @@ class NetworkTrainer:
                     )
 
                     # 指定ステップごとにモデルを保存
-                    if args.save_every_n_steps is not None and global_step % args.save_every_n_steps == 0 and global_step > 50 and ckpt_loss*1.1 >= current_loss:
-                        # logger.info(f"\ncurrent_loss: {current_loss}")
-                        # logger.info(f"ckpt_loss: {ckpt_loss}")
-                        # logger.info(f"len_loss: {len(loss_recorder.loss_list)}")
-                        # ckpt_loss = current_loss
-
-                        # if args.learning_rate < 0.0001:
-                        #     args.unet_lr = args.unet_lr*1.03
-                        #     args.learning_rate = args.learning_rate*1.03
-                        # else:
-                        #     args.unet_lr = args.unet_lr*0.5
-                        #     args.learning_rate = args.learning_rate*0.5
-                        # # else:
-                        # #     args.unet_lr = 0.00001
-                        # #     args.learning_rate = 0.00001
-                        # logger.info(f"unet_lr: {args.unet_lr}")
-                        # logger.info(f"learning_rate: {args.learning_rate}")
-
+                    if args.save_every_n_steps is not None and global_step % args.save_every_n_steps == 0:
                         accelerator.wait_for_everyone()
                         if accelerator.is_main_process:
                             # ckpt_name = train_util.get_step_ckpt_name(args, "." + args.save_model_as, global_step)
                             # save_model(ckpt_name, accelerator.unwrap_model(network), global_step, epoch)
                             logger.info("save_model save_every_n_steps")
 
-                            # ckpt_name = train_util.get_last_ckpt_name(args, "." + args.save_model_as)
-                            # save_model(ckpt_name, network, global_step, num_train_epochs, force_sync_upload=True)
+                            ckpt_name = train_util.get_last_ckpt_name(args, "." + args.save_model_as)
+                            save_model(ckpt_name, network, global_step, num_train_epochs, force_sync_upload=True)
 
                             if args.save_state:
                                 train_util.save_and_remove_state_stepwise(args, accelerator, global_step)
@@ -1473,21 +1456,45 @@ class NetworkTrainer:
                                 remove_ckpt_name = train_util.get_step_ckpt_name(args, "." + args.save_model_as, remove_step_no)
                                 remove_model(remove_ckpt_name)
 
-                    # elif args.save_every_n_steps is not None and global_step % args.save_every_n_steps == 0 and global_step > 50 and ckpt_loss < current_loss:
-                    #     logger.info(f"\ncurrent_loss: {current_loss}")
-                    #     logger.info(f"ckpt_loss: {ckpt_loss}")
+                    if global_step % 20 == 0:
+                        if ckpt_loss*1.0 >= current_loss:
+                            logger.info(f"\ncurrent_loss: {current_loss}")
+                            logger.info(f"ckpt_loss: {ckpt_loss}")
+                            logger.info(f"len_loss: {len(loss_recorder.loss_list)}")
+                            ckpt_loss = current_loss
 
-                    #     if args.learning_rate > 0.0000005:
-                    #         args.unet_lr = args.unet_lr*0.99
-                    #         args.learning_rate = args.learning_rate*0.99
-                    #     else:
-                    #         args.unet_lr = args.unet_lr*1.5
-                    #         args.learning_rate = args.learning_rate*1.5
-                    #     # else:
-                    #     #     args.unet_lr = 0.00001
-                    #     #     args.learning_rate = 0.00001
-                    #     logger.info(f"unet_lr: {args.unet_lr}")
-                    #     logger.info(f"learning_rate: {args.learning_rate}")
+                            if args.learning_rate < 0.0001:
+                                args.unet_lr = args.unet_lr*1.03
+                                args.learning_rate = args.learning_rate*1.03
+                                # args.unet_lr = args.unet_lr + 3*0.000001
+                                # args.learning_rate = args.learning_rate + 3*0.000001
+                            else:
+                                args.unet_lr = args.unet_lr*0.5
+                                args.learning_rate = args.learning_rate*0.5
+                            # else:
+                            #     args.unet_lr = 0.00001
+                            #     args.learning_rate = 0.00001
+                            logger.info(f"unet_lr: {args.unet_lr}")
+                            logger.info(f"learning_rate: {args.learning_rate}")
+
+                        elif ckpt_loss < current_loss:
+                            logger.info(f"\ncurrent_loss: {current_loss}")
+                            logger.info(f"ckpt_loss: {ckpt_loss}")
+                            logger.info(f"len_loss: {len(loss_recorder.loss_list)}")
+
+                            if args.learning_rate > 0.000001:
+                                args.unet_lr = args.unet_lr*0.99
+                                args.learning_rate = args.learning_rate*0.99
+                                # args.unet_lr = args.unet_lr - 2*0.000001
+                                # args.learning_rate = args.learning_rate - 2*0.000001
+                            else:
+                                args.unet_lr = args.unet_lr*1.5
+                                args.learning_rate = args.learning_rate*1.5
+                            # else:
+                            #     args.unet_lr = 0.00001
+                            #     args.learning_rate = 0.00001
+                            logger.info(f"unet_lr: {args.unet_lr}")
+                            logger.info(f"learning_rate: {args.learning_rate}")
 
                     optimizer_train_fn()
 
@@ -1661,26 +1668,7 @@ class NetworkTrainer:
             optimizer_eval_fn()
             if args.save_every_n_epochs is not None:
                 saving = (epoch + 1) % args.save_every_n_epochs == 0 and (epoch + 1) < num_train_epochs
-                if is_main_process and saving and ckpt_loss*1.05 >= current_loss:
-                    logger.info(f"\ncurrent_loss: {current_loss}")
-                    logger.info(f"ckpt_loss: {ckpt_loss}")
-                    logger.info(f"len_loss: {len(loss_recorder.loss_list)}")
-                    ckpt_loss = current_loss
-
-                    if args.learning_rate < 0.0001:
-                        # args.unet_lr = args.unet_lr*1.03
-                        # args.learning_rate = args.learning_rate*1.03
-                        args.unet_lr = args.unet_lr + 3*0.000001
-                        args.learning_rate = args.learning_rate + 3*0.000001
-                    else:
-                        args.unet_lr = args.unet_lr*0.5
-                        args.learning_rate = args.learning_rate*0.5
-                    # else:
-                    #     args.unet_lr = 0.00001
-                    #     args.learning_rate = 0.00001
-                    logger.info(f"unet_lr: {args.unet_lr}")
-                    logger.info(f"learning_rate: {args.learning_rate}")
-
+                if is_main_process and saving:
                     # ckpt_name = train_util.get_epoch_ckpt_name(args, "." + args.save_model_as, epoch + 1)
                     # save_model(ckpt_name, accelerator.unwrap_model(network), global_step, epoch + 1)
                     logger.info("\nsave_model save_every_n_epochs")
@@ -1695,24 +1683,6 @@ class NetworkTrainer:
 
                     if args.save_state:
                         train_util.save_and_remove_state_on_epoch_end(args, accelerator, epoch + 1)
-
-                elif is_main_process and saving and ckpt_loss < current_loss:
-                    logger.info(f"\ncurrent_loss: {current_loss}")
-                    logger.info(f"ckpt_loss: {ckpt_loss}")
-
-                    if args.learning_rate > 0.000001:
-                        # args.unet_lr = args.unet_lr*0.99
-                        # args.learning_rate = args.learning_rate*0.99
-                        args.unet_lr = args.unet_lr - 2*0.000001
-                        args.learning_rate = args.learning_rate - 2*0.000001
-                    else:
-                        args.unet_lr = args.unet_lr*1.5
-                        args.learning_rate = args.learning_rate*1.5
-                    # else:
-                    #     args.unet_lr = 0.00001
-                    #     args.learning_rate = 0.00001
-                    logger.info(f"unet_lr: {args.unet_lr}")
-                    logger.info(f"learning_rate: {args.learning_rate}")
 
             self.sample_images(accelerator, args, epoch + 1, global_step, accelerator.device, vae, tokenizers, text_encoder, unet)
             optimizer_train_fn()
